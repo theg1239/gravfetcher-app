@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">chcxtracker</string>
+    <string name="default_notification_channel_id" translatable="false">default_channel</string>
 </resources>

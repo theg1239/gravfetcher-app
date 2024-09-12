@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1095124995401",
+    "project_id": "chcxtracker-3f9e8",
+    "storage_bucket": "chcxtracker-3f9e8.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1095124995401:android:efbd1b18cfd8d9df451e98",
+        "android_client_info": {
+          "package_name": "com.chcxtracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDN1rrrsRJwJp1PXAnIuEd0TLNRx_-qLI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1095124995401:android:a42c69383eec10a7451e98",
+        "android_client_info": {
+          "package_name": "in.cryptichunt.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDN1rrrsRJwJp1PXAnIuEd0TLNRx_-qLI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
