@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, Animated, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, Platform } from 'react-native';
+import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
+import Animated, {
+  useAnimatedSensor,
+  SensorType,
+  useAnimatedProps,
+  useSharedValue,
+  withTiming,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 
 interface EventCardProps {
   logoSrc: any;
@@ -8,28 +18,48 @@ interface EventCardProps {
   totalSeats: number;
 }
 
-export default function EventCard({ logoSrc, eventName, apiEndpoint, totalSeats }: EventCardProps) {
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+export default function EventCard({
+  logoSrc,
+  eventName,
+  apiEndpoint,
+  totalSeats,
+}: EventCardProps) {
   const [filledSeats, setFilledSeats] = useState<number>(0);
   const [availableSeats, setAvailableSeats] = useState<number>(totalSeats);
-  const [waterLevel, setWaterLevel] = useState(new Animated.Value(0)); // For water animation
+
+  // Shared values for water level and wave animation
+  const waterLevel = useSharedValue(0);
+  const wavePhase = useSharedValue(0);
+
+  // Use AnimatedSensor for gyroscope data
+  const animatedSensor = useAnimatedSensor(SensorType.GYROSCOPE);
+
+  useEffect(() => {
+    // Start the wave animation
+    wavePhase.value = withRepeat(
+      withTiming(2 * Math.PI, { duration: 5000, easing: Easing.linear }),
+      -1,
+      false
+    );
+  }, [wavePhase]);
 
   useEffect(() => {
     const fetchSeatData = async () => {
       try {
         const response = await fetch(apiEndpoint);
         const data = await response.json();
-        const availableSeats = data.availableSeats || totalSeats; // Ensure it's defined
+        const availableSeats = data.availableSeats || totalSeats;
         const filledSeats = totalSeats - availableSeats;
 
         setFilledSeats(filledSeats);
         setAvailableSeats(availableSeats);
 
-        // Animate the water level
-        Animated.timing(waterLevel, {
-          toValue: (filledSeats / totalSeats) * 100,
+        // Animate water level based on filled seats
+        waterLevel.value = withTiming(filledSeats / totalSeats, {
           duration: 1000,
-          useNativeDriver: false,
-        }).start();
+        });
       } catch (error) {
         console.error(`Error fetching seat data for ${eventName}:`, error);
       }
@@ -39,24 +69,66 @@ export default function EventCard({ logoSrc, eventName, apiEndpoint, totalSeats 
     const interval = setInterval(fetchSeatData, 10000);
 
     return () => clearInterval(interval);
-  }, [apiEndpoint, totalSeats]);
+  }, [apiEndpoint, totalSeats, eventName, waterLevel]);
+
+  // Animated props for the wave path
+  const animatedProps = useAnimatedProps(() => {
+    const width = 260; // Card width
+    const height = 300; // Card height
+    const waterHeight = waterLevel.value * height; // Water level based on filled seats
+
+    // Wave parameters
+    const amplitude = 10; // Wave amplitude
+    const frequency = (2 * Math.PI) / width;
+
+    // Gyroscope data
+    const { x, y } = animatedSensor.sensor.value;
+    const tiltX = x * 5; // Adjust sensitivity as needed
+    const tiltY = y * 5;
+
+    // Generate the wave path
+    let path = `M0 ${height}`;
+    path += ` L0 ${height - waterHeight}`;
+
+    const step = 5; // Increase or decrease for smoother or coarser waves
+
+    for (let i = 0; i <= width; i += step) {
+      const theta = frequency * i + wavePhase.value + tiltX;
+      const yValue =
+        amplitude * Math.sin(theta) +
+        (height - waterHeight) +
+        amplitude * Math.sin(tiltY);
+      path += ` L${i} ${yValue}`;
+    }
+
+    path += ` L${width} ${height}`;
+    path += ' Z';
+
+    return {
+      d: path,
+    };
+  });
 
   return (
     <View style={styles.card}>
       {/* Water Effect */}
-      <View style={styles.waterContainer}>
-        <Animated.View
-          style={[
-            styles.water,
-            {
-              height: waterLevel.interpolate({
-                inputRange: [0, 100],
-                outputRange: ['0%', '100%'],
-              }),
-            },
-          ]}
+      <Svg
+        style={StyleSheet.absoluteFill}
+        width="100%"
+        height="100%"
+        viewBox={`0 0 260 300`}
+      >
+        <Defs>
+          <ClipPath id="clip">
+            <Rect x="0" y="0" width="260" height="300" rx="12" ry="12" />
+          </ClipPath>
+        </Defs>
+        <AnimatedPath
+          animatedProps={animatedProps}
+          fill="rgba(50, 150, 255, 0.6)"
+          clipPath="url(#clip)"
         />
-      </View>
+      </Svg>
 
       {/* Logo and Counter */}
       <View style={styles.contentContainer}>
@@ -75,55 +147,38 @@ export default function EventCard({ logoSrc, eventName, apiEndpoint, totalSeats 
 
 const styles = StyleSheet.create({
   card: {
-    width: 260, // Adjust the width for better alignment
-    height: 300, // Adjust the height to make the card shorter
+    width: 260,
+    height: 300,
     borderRadius: 12,
     marginBottom: 20,
     overflow: 'hidden',
-    backgroundColor: '#0d0d0d', // Lighter black background for the card
+    backgroundColor: '#0d0d0d',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)', // Lighter border to differentiate from background
-    position: 'relative', // For overlaying text on water
-  },
-  waterContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#1a1a1a', // Lighter black for the water container
-    overflow: 'hidden', // Make sure water stays inside the container
-    zIndex: 1, // Water container is below content
-  },
-  water: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '200%', // Simulating a wave effect
-    backgroundColor: 'rgba(50, 150, 255, 0.6)', // Water color
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    position: 'relative',
   },
   contentContainer: {
-    zIndex: 2, // Ensures the content stays on top of the water
+    zIndex: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 30, // Lower margin to move the logo down
+    marginTop: 30,
   },
   logo: {
-    width: 70, // Make logo bigger
-    height: 70, // Make logo bigger
+    width: 70,
+    height: 70,
     resizeMode: 'contain',
-    marginBottom: 10, // Space below the logo
+    marginBottom: 10,
   },
   counter: {
     fontSize: 48,
     fontWeight: 'bold',
     color: 'white',
-    marginTop: 20, // Lower the counter to be more centered
+    marginTop: 20,
   },
   seatsInfoContainer: {
     zIndex: 2,
-    position: 'absolute', // Absolute positioning to align under the counter
-    bottom: 20, // Adjust based on your illustration
+    position: 'absolute',
+    bottom: 20,
     alignItems: 'center',
     width: '100%',
   },

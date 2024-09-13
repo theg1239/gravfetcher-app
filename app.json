@@ -1,4 +1,5 @@
 {
   "name": "chcxtracker",
-  "displayName": "chcxtracker"
+  "displayName": "CHCX Tracker",
+  "icon": "./assets/ch.png"
 }
