@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
 import Animated, {
-  useAnimatedSensor,
-  SensorType,
-  useAnimatedProps,
   useSharedValue,
+  useAnimatedProps,
   withTiming,
   withRepeat,
   Easing,
 } from 'react-native-reanimated';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 interface EventCardProps {
   logoSrc: any;
@@ -28,22 +27,13 @@ export default function EventCard({
 }: EventCardProps) {
   const [filledSeats, setFilledSeats] = useState<number>(0);
   const [availableSeats, setAvailableSeats] = useState<number>(totalSeats);
+  const [confettiVisible, setConfettiVisible] = useState(false);
+  const previousFilledSeatsRef = useRef<number>(0); // To track the previous filled seat count
+  const isInitialLoad = useRef(true); // To detect the initial load
 
   // Shared values for water level and wave animation
   const waterLevel = useSharedValue(0);
-  const wavePhase = useSharedValue(0);
-
-  // Use AnimatedSensor for gyroscope data
-  const animatedSensor = useAnimatedSensor(SensorType.GYROSCOPE);
-
-  useEffect(() => {
-    // Start the wave animation
-    wavePhase.value = withRepeat(
-      withTiming(2 * Math.PI, { duration: 5000, easing: Easing.linear }),
-      -1,
-      false
-    );
-  }, [wavePhase]);
+  const waveOffset = useSharedValue(0);
 
   useEffect(() => {
     const fetchSeatData = async () => {
@@ -51,15 +41,37 @@ export default function EventCard({
         const response = await fetch(apiEndpoint);
         const data = await response.json();
         const availableSeats = data.availableSeats || totalSeats;
-        const filledSeats = totalSeats - availableSeats;
+        const newFilledSeats = totalSeats - availableSeats;
 
-        setFilledSeats(filledSeats);
+        setFilledSeats(newFilledSeats);
         setAvailableSeats(availableSeats);
 
         // Animate water level based on filled seats
-        waterLevel.value = withTiming(filledSeats / totalSeats, {
+        waterLevel.value = withTiming(newFilledSeats / totalSeats, {
           duration: 1000,
         });
+
+        // If it's not the initial load, check for milestones
+        if (!isInitialLoad.current) {
+          const previousHundreds = Math.floor(previousFilledSeatsRef.current / 100);
+          const currentHundreds = Math.floor(newFilledSeats / 100);
+
+          // Check if newFilledSeats has crossed into a new hundred
+          if (
+            newFilledSeats > previousFilledSeatsRef.current &&
+            currentHundreds > previousHundreds
+          ) {
+            // Trigger confetti
+            setConfettiVisible(true);
+            setTimeout(() => setConfettiVisible(false), 5000); // Hide confetti after 5 seconds
+          }
+        } else {
+          // Set the initial load flag to false after the first data fetch
+          isInitialLoad.current = false;
+        }
+
+        // Update the previous filledSeats value
+        previousFilledSeatsRef.current = newFilledSeats;
       } catch (error) {
         console.error(`Error fetching seat data for ${eventName}:`, error);
       }
@@ -69,7 +81,19 @@ export default function EventCard({
     const interval = setInterval(fetchSeatData, 10000);
 
     return () => clearInterval(interval);
-  }, [apiEndpoint, totalSeats, eventName, waterLevel]);
+  }, [apiEndpoint, totalSeats, eventName]);
+
+  // Animate the wave offset
+  useEffect(() => {
+    waveOffset.value = withRepeat(
+      withTiming(-Math.PI * 2, {
+        duration: 5000,
+        easing: Easing.linear,
+      }),
+      -1,
+      false
+    );
+  }, [waveOffset]);
 
   // Animated props for the wave path
   const animatedProps = useAnimatedProps(() => {
@@ -81,10 +105,8 @@ export default function EventCard({
     const amplitude = 10; // Wave amplitude
     const frequency = (2 * Math.PI) / width;
 
-    // Gyroscope data
-    const { x, y } = animatedSensor.sensor.value;
-    const tiltX = x * 5; // Adjust sensitivity as needed
-    const tiltY = y * 5;
+    // Wave offset for animation
+    const offset = waveOffset.value;
 
     // Generate the wave path
     let path = `M0 ${height}`;
@@ -92,13 +114,10 @@ export default function EventCard({
 
     const step = 5; // Increase or decrease for smoother or coarser waves
 
-    for (let i = 0; i <= width; i += step) {
-      const theta = frequency * i + wavePhase.value + tiltX;
-      const yValue =
-        amplitude * Math.sin(theta) +
-        (height - waterHeight) +
-        amplitude * Math.sin(tiltY);
-      path += ` L${i} ${yValue}`;
+    for (let x = 0; x <= width; x += step) {
+      const theta = frequency * x + offset;
+      const y = amplitude * Math.sin(theta) + (height - waterHeight);
+      path += ` L${x} ${y}`;
     }
 
     path += ` L${width} ${height}`;
@@ -141,6 +160,17 @@ export default function EventCard({
         <Text style={styles.text}>Total Seats: {totalSeats || 0}</Text>
         <Text style={styles.text}>Seats Left: {availableSeats || 0}</Text>
       </View>
+
+      {/* Confetti Cannon */}
+      {confettiVisible && (
+        <View style={styles.confettiContainer}>
+          <ConfettiCannon
+            count={100}
+            origin={{ x: 130, y: 0 }} // Center the confetti at the top of the card
+            fadeOut={true}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -158,7 +188,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   contentContainer: {
-    zIndex: 2,
+    zIndex: 1, // Keep content below confetti
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 30,
@@ -176,7 +206,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   seatsInfoContainer: {
-    zIndex: 2,
+    zIndex: 1, // Keep content below confetti
     position: 'absolute',
     bottom: 20,
     alignItems: 'center',
@@ -185,5 +215,14 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 14,
     color: 'white',
+  },
+  confettiContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3, // Make sure confetti is above everything else
+    pointerEvents: 'none', // Prevent blocking interactions
   },
 });

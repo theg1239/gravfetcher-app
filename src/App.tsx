@@ -184,7 +184,7 @@ export default function App() {
           logoSrc={require('./assets/cx.png')}
           eventName="Codex Cryptum"
           apiEndpoint="https://track.cryptichunt.in/seats2"
-          totalSeats={200}
+          totalSeats={120}
         />
 
         {/* Notification Button */}
