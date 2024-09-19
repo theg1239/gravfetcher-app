@@ -1,14 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
-import Animated, {
-  useSharedValue,
-  useAnimatedProps,
-  withTiming,
-  withRepeat,
-  Easing,
-} from 'react-native-reanimated';
-import ConfettiCannon from 'react-native-confetti-cannon';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, Dimensions } from 'react-native';
+import { Card, ProgressBar } from 'react-native-paper';
 
 interface EventCardProps {
   logoSrc: any;
@@ -17,61 +9,22 @@ interface EventCardProps {
   totalSeats: number;
 }
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
+const { height } = Dimensions.get('window'); 
 
-export default function EventCard({
-  logoSrc,
-  eventName,
-  apiEndpoint,
-  totalSeats,
-}: EventCardProps) {
+export default function EventCard({ logoSrc, eventName, apiEndpoint, totalSeats }: EventCardProps) {
   const [filledSeats, setFilledSeats] = useState<number>(0);
   const [availableSeats, setAvailableSeats] = useState<number>(totalSeats);
-  const [confettiVisible, setConfettiVisible] = useState(false);
-  const previousFilledSeatsRef = useRef<number>(0); // To track the previous filled seat count
-  const isInitialLoad = useRef(true); // To detect the initial load
-
-  // Shared values for water level and wave animation
-  const waterLevel = useSharedValue(0);
-  const waveOffset = useSharedValue(0);
 
   useEffect(() => {
     const fetchSeatData = async () => {
       try {
         const response = await fetch(apiEndpoint);
         const data = await response.json();
-        const availableSeats = data.availableSeats || totalSeats;
-        const newFilledSeats = totalSeats - availableSeats;
+        const newAvailableSeats = data.availableSeats ?? totalSeats;
+        const newFilledSeats = totalSeats - newAvailableSeats;
 
         setFilledSeats(newFilledSeats);
-        setAvailableSeats(availableSeats);
-
-        // Animate water level based on filled seats
-        waterLevel.value = withTiming(newFilledSeats / totalSeats, {
-          duration: 1000,
-        });
-
-        // If it's not the initial load, check for milestones
-        if (!isInitialLoad.current) {
-          const previousHundreds = Math.floor(previousFilledSeatsRef.current / 100);
-          const currentHundreds = Math.floor(newFilledSeats / 100);
-
-          // Check if newFilledSeats has crossed into a new hundred
-          if (
-            newFilledSeats > previousFilledSeatsRef.current &&
-            currentHundreds > previousHundreds
-          ) {
-            // Trigger confetti
-            setConfettiVisible(true);
-            setTimeout(() => setConfettiVisible(false), 5000); // Hide confetti after 5 seconds
-          }
-        } else {
-          // Set the initial load flag to false after the first data fetch
-          isInitialLoad.current = false;
-        }
-
-        // Update the previous filledSeats value
-        previousFilledSeatsRef.current = newFilledSeats;
+        setAvailableSeats(newAvailableSeats);
       } catch (error) {
         console.error(`Error fetching seat data for ${eventName}:`, error);
       }
@@ -83,146 +36,101 @@ export default function EventCard({
     return () => clearInterval(interval);
   }, [apiEndpoint, totalSeats, eventName]);
 
-  // Animate the wave offset
-  useEffect(() => {
-    waveOffset.value = withRepeat(
-      withTiming(-Math.PI * 2, {
-        duration: 5000,
-        easing: Easing.linear,
-      }),
-      -1,
-      false
-    );
-  }, [waveOffset]);
-
-  // Animated props for the wave path
-  const animatedProps = useAnimatedProps(() => {
-    const width = 260; // Card width
-    const height = 300; // Card height
-    const waterHeight = waterLevel.value * height; // Water level based on filled seats
-
-    // Wave parameters
-    const amplitude = 10; // Wave amplitude
-    const frequency = (2 * Math.PI) / width;
-
-    // Wave offset for animation
-    const offset = waveOffset.value;
-
-    // Generate the wave path
-    let path = `M0 ${height}`;
-    path += ` L0 ${height - waterHeight}`;
-
-    const step = 5; // Increase or decrease for smoother or coarser waves
-
-    for (let x = 0; x <= width; x += step) {
-      const theta = frequency * x + offset;
-      const y = amplitude * Math.sin(theta) + (height - waterHeight);
-      path += ` L${x} ${y}`;
-    }
-
-    path += ` L${width} ${height}`;
-    path += ' Z';
-
-    return {
-      d: path,
-    };
-  });
+  const progress = filledSeats / totalSeats;
 
   return (
-    <View style={styles.card}>
-      {/* Water Effect */}
-      <Svg
-        style={StyleSheet.absoluteFill}
-        width="100%"
-        height="100%"
-        viewBox={`0 0 260 300`}
-      >
-        <Defs>
-          <ClipPath id="clip">
-            <Rect x="0" y="0" width="260" height="300" rx="12" ry="12" />
-          </ClipPath>
-        </Defs>
-        <AnimatedPath
-          animatedProps={animatedProps}
-          fill="rgba(50, 150, 255, 0.6)"
-          clipPath="url(#clip)"
-        />
-      </Svg>
-
-      {/* Logo and Counter */}
+    <Card style={[styles.card, { height: height * 0.40 }]}>
       <View style={styles.contentContainer}>
-        <Image source={logoSrc} style={styles.logo} />
-        <Text style={styles.counter}>{filledSeats || 0}</Text>
-      </View>
-
-      {/* Total Seats and Seats Left */}
-      <View style={styles.seatsInfoContainer}>
-        <Text style={styles.text}>Total Seats: {totalSeats || 0}</Text>
-        <Text style={styles.text}>Seats Left: {availableSeats || 0}</Text>
-      </View>
-
-      {/* Confetti Cannon */}
-      {confettiVisible && (
-        <View style={styles.confettiContainer}>
-          <ConfettiCannon
-            count={100}
-            origin={{ x: 130, y: 0 }} // Center the confetti at the top of the card
-            fadeOut={true}
-          />
+        <View style={styles.header}>
+          <Image source={logoSrc} style={styles.logo} />
+          <Text style={styles.eventName}>{eventName}</Text>
         </View>
-      )}
-    </View>
+
+        <View style={styles.centerContent}>
+          <Text style={styles.counter}>{filledSeats}</Text>
+          <ProgressBar progress={progress} color={'#3b82f6'} style={styles.progressBar} />
+        </View>
+
+        <View style={styles.footer}>
+          <View style={styles.footerItem}>
+            <Text style={styles.text}>Total Seats:</Text>
+            <Text style={styles.textValue}>{totalSeats}</Text>
+          </View>
+          <View style={styles.footerItem}>
+            <Text style={styles.text}>Seats Left:</Text>
+            <Text style={styles.textValue}>{availableSeats}</Text>
+          </View>
+        </View>
+      </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    width: 260,
-    height: 300,
+    marginVertical: 10,
     borderRadius: 12,
-    marginBottom: 20,
-    overflow: 'hidden',
-    backgroundColor: '#0d0d0d',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    position: 'relative',
+    padding: 16,
+    backgroundColor: '#1e1e1e',
   },
   contentContainer: {
-    zIndex: 1, // Keep content below confetti
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    height: '100%',
+  },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 30,
+    marginBottom: 10,
   },
   logo: {
-    width: 70,
-    height: 70,
-    resizeMode: 'contain',
-    marginBottom: 10,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 10,
+  },
+  eventName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   counter: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#ffffff',
+    marginBottom: 10,
+  },
+  progressBar: {
+    height: 8,
+    width: '100%',
+    borderRadius: 4,
+    marginVertical: 10,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 20,
   },
-  seatsInfoContainer: {
-    zIndex: 1, // Keep content below confetti
-    position: 'absolute',
-    bottom: 20,
+  footerItem: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
   },
   text: {
-    fontSize: 14,
-    color: 'white',
+    fontSize: 16,
+    color: '#a9a9a9',
+    marginRight: 5,
   },
-  confettiContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 3, // Make sure confetti is above everything else
-    pointerEvents: 'none', // Prevent blocking interactions
+  textValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
 });
